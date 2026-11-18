@@ -46,7 +46,7 @@
   .mobile-only{display:none}
   .hint .btn{margin-top:14px}
   /* iPhone: Bild bildschirmfüllend, Bedienung unten drüber */
-  @media (max-width:800px){
+  @media (max-width:800px), (pointer:coarse){
     html,body{overflow:hidden;overscroll-behavior:none}
     .app{display:block;padding:0;height:100dvh}
     .stage{position:fixed;inset:0;height:100%;width:100%;border:0;border-radius:0;aspect-ratio:auto}
@@ -71,6 +71,8 @@
     .take video{width:40px;height:72px}
     .take .meta{display:none}
   }
+  /* iPhone Duo aufgeklappt (fast quadratisch): ganzes 9:16-Bild zeigen, genau das wird aufgenommen */
+  @media (pointer:coarse) and (min-aspect-ratio:3/4), (max-width:800px) and (min-aspect-ratio:3/4){ canvas{object-fit:contain} }
 </style>
 </head>
 <body>
@@ -240,14 +242,18 @@ async function listCams(){
   const sel = $('cam'); const cur = stream?.getVideoTracks()[0]?.getSettings().deviceId;
   sel.innerHTML = devs.map(d=>`<option value="${d.deviceId}" ${d.deviceId===cur?'selected':''}>${d.label||'Kamera'}</option>`).join('');
 }
-const isPhone = matchMedia('(max-width:800px)').matches;
-let facing = 'user', ac = null;
+const phoneMQ = matchMedia('(max-width:800px), (pointer:coarse)');
+const isPhone = () => phoneMQ.matches;
+const store = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch(e) { return null; } };
+// Standard: Hauptkamera hinten (iPhone Duo zugeklappt, Außenbildschirm als Sucher)
+let facing = store('deform8.facing') || 'environment', ac = null;
+if (store('deform8.mirror') === '0') $('mirror').checked = false;
+$('mirror').onchange = () => store('deform8.mirror', $('mirror').checked ? '1' : '0');
 async function startCam(deviceId){
-  if (recorder) return;
   if (!ac) ac = new (window.AudioContext||window.webkitAudioContext)();   // im Tipp anlegen, sonst bleibt iOS stumm
   ac.resume();
   if (stream) stream.getTracks().forEach(t=>t.stop());
-  const v = isPhone && !deviceId
+  const v = isPhone() && !deviceId
     ? {facingMode:facing, width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30}}
     : {deviceId: deviceId?{exact:deviceId}:undefined, width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30}};
   stream = await navigator.mediaDevices.getUserMedia({
@@ -258,15 +264,27 @@ async function startCam(deviceId){
   analyser = ac.createAnalyser(); analyser.fftSize = 1024; abuf = new Float32Array(analyser.fftSize);
   src.connect(analyser);
   $('hint').style.display = 'none'; $('rec').disabled = false;
+  // Auf-/Zuklappen kann die Kamera beenden: laufende Aufnahme sichern und Kamera neu starten
+  stream.getVideoTracks()[0].addEventListener('ended', camLost);
   try { await navigator.wakeLock?.request('screen'); } catch(e) {}
   await listCams();
 }
+let restarting = false;
+async function camLost(){
+  if (restarting) return; restarting = true;
+  if (recorder) recorder.stop();
+  try { await startCam(); } catch(e) { camFail(e); }
+  restarting = false;
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && stream && stream.getVideoTracks()[0]?.readyState === 'ended') camLost();
+});
 const camFail = e => { $('hint').style.display = 'flex'; $('hintText').textContent = 'Kamera oder Mikro nicht freigegeben (' + e.message + '). Erlaube den Zugriff und tipp nochmal.'; };
 $('start').onclick = () => startCam($('cam').value && $('cam').value.length>20 ? $('cam').value : undefined).catch(camFail);
 $('start2').onclick = () => startCam().catch(camFail);
-$('cam').onchange = e => startCam(e.target.value).catch(camFail);
-$('flip').onclick = () => { facing = facing === 'user' ? 'environment' : 'user'; $('mirror').checked = facing === 'user'; startCam().catch(camFail); };
-$('mir2').onclick = () => { $('mirror').checked = !$('mirror').checked; };
+$('cam').onchange = e => { if (!recorder) startCam(e.target.value).catch(camFail); };
+$('flip').onclick = () => { if (recorder) return; facing = facing === 'user' ? 'environment' : 'user'; store('deform8.facing', facing); startCam().catch(camFail); };
+$('mir2').onclick = () => { $('mirror').checked = !$('mirror').checked; $('mirror').onchange(); };
 
 // ---- Gesichtserkennung (MediaPipe)
 let landmarker = null;
@@ -377,7 +395,7 @@ function addTake(blob, ext){
   const file = new File([blob], name, {type: blob.type});
   el.querySelector('.save').onclick = async () => {
     // iPhone: Teilen-Menü öffnen, dort „Video sichern“ → landet in Fotos
-    if (isPhone && navigator.canShare && navigator.canShare({files:[file]})) {
+    if (isPhone() && navigator.canShare && navigator.canShare({files:[file]})) {
       try { await navigator.share({files:[file]}); return; } catch(e) { if (e.name === 'AbortError') return; }
     }
     const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
