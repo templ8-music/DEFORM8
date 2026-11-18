@@ -103,7 +103,7 @@
     </div>
     <div class="takes" id="takes"><span class="small">Noch keine Aufnahmen. Jede Aufnahme landet hier zum Speichern.</span></div>
     <div>
-      <div class="label">Filter (Tasten 0–8, auch während der Aufnahme)</div>
+      <div class="label">Filter (Tasten 0–9, auch während der Aufnahme)</div>
       <div class="filters" id="filters"></div>
     </div>
     <div class="row ctrl">
@@ -167,6 +167,13 @@ void main(){
   } else if (uMode == 6) {     // EIERKOPF
     q = lens(q, uForehead + (uForehead - uFace)*0.35, fs*0.95, 0.6);
     q = lens(q, uChin, fs*0.55, -0.9);
+  } else if (uMode == 9) {     // BABYSCHREI: Kulleraugen dauerhaft, Mund klein und wächst beim Öffnen
+    float o = uOpen;
+    float k = clamp(-0.7 + o*2.0 + uLevel*0.35, -0.7, 0.84);
+    q = lens(q, uMouth, fs*(0.38 + 0.34*o), k);
+    q = lens(q, uChin, fs*0.45, -0.5*(1.0 - o));
+    q = lens(q, uEyeL, fs*0.32, 0.62);
+    q = lens(q, uEyeR, fs*0.32, 0.62);
   } else if (uMode == 8) {     // ZWILLING
     if (p.x > uFace.x) q.x = 2.0*uFace.x - p.x;
   }
@@ -199,6 +206,7 @@ const FILTERS = [
   {name:'Eierkopf', desc:'Alien-Stirn, Mini-Kinn'},
   {name:'Autotune-Glitch', desc:'zerfällt, wenn du laut wirst'},
   {name:'Zwilling', desc:'Gesicht gespiegelt'},
+  {name:'Babyschrei', desc:'Kulleraugen, Mund wächst beim Singen'},
 ];
 const W = 1080, H = 1920;
 let mode = 0;
@@ -430,7 +438,7 @@ $('rec').onclick = toggleRec;
 addEventListener('keydown', e => {
   if (e.target.tagName === 'SELECT') return;
   if (e.code === 'Space') { e.preventDefault(); toggleRec(); }
-  const n = parseInt(e.key); if (n >= 0 && n <= 8) setMode(n);
+  const n = parseInt(e.key); if (n >= 0 && n <= 9) setMode(n);
 });
 </script>
 </body>
