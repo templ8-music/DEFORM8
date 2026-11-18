@@ -263,7 +263,7 @@ async function startCam(deviceId){
   ac.resume();
   if (stream) stream.getTracks().forEach(t=>t.stop());
   const v = isPhone() && !deviceId
-    ? {facingMode:facing, width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:30, max:30}}   // Handy: 720p reicht für 1080er Ausgabe und spart Wärme
+    ? {facingMode:facing, width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30, max:30}}   // Handy: volle 1080p wie die übrigen TikToks
     : {deviceId: deviceId?{exact:deviceId}:undefined, width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30}};
   stream = await navigator.mediaDevices.getUserMedia({
     video: v, audio: {echoCancellation:false, noiseSuppression:false, autoGainControl:false}
