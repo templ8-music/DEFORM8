@@ -61,7 +61,8 @@
     .filters::-webkit-scrollbar{display:none}
     .f{flex:0 0 auto;padding:8px 12px;border-radius:999px;background:rgba(22,22,26,.8)}
     .f b{font-size:13px;white-space:nowrap}
-    .ctrl{justify-content:space-between;align-items:center;flex-wrap:nowrap}
+    .ctrl{display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
+    .grp{gap:8px}
     .btn.recbtn{flex:0 0 auto;width:74px;height:74px;border-radius:50%;padding:0;font-size:0;border:5px solid #fff;background:var(--rec)}
     .btn.recbtn.on{background:var(--rec);border-radius:22px;border-color:#fff}
     .round{width:52px;height:52px;border-radius:50%;padding:0;background:rgba(22,22,26,.8);font-size:20px;justify-content:center;align-items:center}
@@ -106,9 +107,9 @@
       <div class="filters" id="filters"></div>
     </div>
     <div class="row ctrl">
-      <button class="btn round mobile-only" id="flip" aria-label="Kamera wechseln">⇄</button>
+      <div class="grp mobile-only"><button class="btn round" id="flip" aria-label="Kamera wechseln">⇄</button><button class="btn round" id="rot" aria-label="Bild drehen">↻</button></div>
       <button class="btn big recbtn" id="rec" disabled>Aufnahme (Leertaste)</button>
-      <button class="btn round mobile-only" id="mir2" aria-label="Spiegeln umschalten">◐</button>
+      <div class="grp mobile-only" style="justify-content:flex-end"><button class="btn round" id="mir2" aria-label="Spiegeln umschalten">◐</button></div>
     </div>
   </div>
 </div>
@@ -286,6 +287,28 @@ $('cam').onchange = e => { if (!recorder) startCam(e.target.value).catch(camFail
 $('flip').onclick = () => { if (recorder) return; facing = facing === 'user' ? 'environment' : 'user'; store('deform8.facing', facing); startCam().catch(camFail); };
 $('mir2').onclick = () => { $('mirror').checked = !$('mirror').checked; $('mirror').onchange(); };
 
+// ---- Drehung: Duo aufgeklappt liefert das Kamerabild quer, Ausgabe bleibt immer 9:16 hoch.
+// Gemerkt je Kamera und je Bildlage (quer/hoch), damit Zu- und Aufklappen jeweils stimmt.
+const srcCv = document.createElement('canvas'), sctx = srcCv.getContext('2d');
+const rotMem = {};
+const rotKey = () => `deform8.rot.${facing}.${video.videoWidth > video.videoHeight ? 'quer' : 'hoch'}`;
+function curRot(){
+  if (!isPhone()) return 0;
+  const k = rotKey();
+  if (!(k in rotMem)) { const s = store(k); rotMem[k] = s !== null && s !== undefined ? +s : (video.videoWidth > video.videoHeight ? 1 : 0); }
+  return rotMem[k];
+}
+$('rot').onclick = () => { if (!video.videoWidth) return; const k = rotKey(); rotMem[k] = (curRot() + 1) % 4; store(k, String(rotMem[k])); };
+// Bildquelle in Vierteldrehungen gegen den Uhrzeigersinn
+function source(){
+  const r = curRot(), vw = video.videoWidth, vh = video.videoHeight;
+  if (!r) return {el:video, w:vw, h:vh};
+  const sw = r % 2 ? vh : vw, sh = r % 2 ? vw : vh;
+  if (srcCv.width !== sw || srcCv.height !== sh) { srcCv.width = sw; srcCv.height = sh; }
+  sctx.setTransform(1,0,0,1,sw/2,sh/2); sctx.rotate(-r*Math.PI/2); sctx.drawImage(video, -vw/2, -vh/2);
+  return {el:srcCv, w:sw, h:sh};
+}
+
 // ---- Gesichtserkennung (MediaPipe)
 let landmarker = null;
 (async () => {
@@ -303,19 +326,19 @@ let landmarker = null;
 // Gesichtspunkte in Ausgabe-Pixeln, geglättet
 const F = {face:[W/2,H*0.42], eyeL:[W*0.4,H*0.38], eyeR:[W*0.6,H*0.38], mouth:[W/2,H*0.5], chin:[W/2,H*0.56], forehead:[W/2,H*0.3], nose:[W/2,H*0.44], fs:W*0.5, open:0};
 let lastVT = -1, seen = 0;
-function geom(){
-  const vw = video.videoWidth, vh = video.videoHeight;
+function geom(S){
+  const vw = S.w, vh = S.h;
   const s = Math.max(W/vw, H/vh);
   return {vw, vh, s, ox:(W - vw*s)/2, oy:(H - vh*s)/2};
 }
-function track(now){
+function track(now, S){
   if (!landmarker || video.currentTime === lastVT) return;
   lastVT = video.currentTime;
-  const r = landmarker.detectForVideo(video, now);
+  const r = landmarker.detectForVideo(S.el, now);
   const lm = r.faceLandmarks?.[0];
   if (!lm) { seen = Math.max(0, seen-1); return; }
   seen = 10;
-  const g = geom(), mir = $('mirror').checked;
+  const g = geom(S), mir = $('mirror').checked;
   const P = i => { let x = lm[i].x*g.vw; if (mir) x = g.vw - x; return [x*g.s + g.ox, lm[i].y*g.vh*g.s + g.oy]; };
   const mid = (a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];
   const dist = (a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
@@ -348,10 +371,11 @@ function readLevel(){
 function frame(now){
   requestAnimationFrame(frame);
   if (video.readyState < 2) return;
-  try { track(now); } catch(e) {}
+  const S = source();
+  try { track(now, S); } catch(e) {}
   readLevel();
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, video);
-  const g = geom();
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, S.el);
+  const g = geom(S);
   gl.uniform1i(u.uTex, 0);
   gl.uniform2f(u.uRes, W, H); gl.uniform2f(u.uVid, g.vw, g.vh); gl.uniform2f(u.uOff, g.ox, g.oy);
   gl.uniform1f(u.uScale, g.s); gl.uniform1f(u.uMirror, $('mirror').checked ? 1 : 0);
