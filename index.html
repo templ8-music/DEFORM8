@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>DEFORM8</title>
+<style>
+  :root{
+    --bg:#0b0b0d; --panel:#16161a; --line:#2a2a31; --fg:#f2f2f4; --dim:#8b8b96; --accent:#8B5CF6; --rec:#ff3b3b;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 -apple-system,BlinkMacSystemFont,"Inter",sans-serif}
+  .app{display:grid;grid-template-columns:auto 320px;gap:24px;height:100%;padding:20px max(16px,env(safe-area-inset-right,0px)) 20px max(16px,env(safe-area-inset-left,0px));justify-content:center}
+  .stage{position:relative;height:calc(100vh - 40px);aspect-ratio:9/16;max-width:100%;background:#000;border-radius:14px;overflow:hidden;border:1px solid var(--line)}
+  canvas{width:100%;height:100%;display:block}
+  .badge{position:absolute;top:14px;left:14px;padding:5px 10px;border-radius:999px;background:rgba(0,0,0,.55);font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+  .badge.rec{background:var(--rec);display:none}
+  .badge.rec.on{display:block}
+  .hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--dim)}
+  .side{display:flex;flex-direction:column;gap:16px;min-width:0;overflow:auto;padding-bottom:12px}
+  h1{font-size:22px;margin:0;letter-spacing:.04em}
+  h1 span{color:var(--accent)}
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);margin-bottom:6px}
+  .filters{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .f{background:var(--panel);border:1px solid var(--line);color:var(--fg);border-radius:10px;padding:10px;text-align:left;cursor:pointer;font:inherit}
+  .f b{display:block;font-size:13px}
+  .f small{color:var(--dim);font-size:11px}
+  .f kbd{float:right;color:var(--dim);font-size:11px}
+  .f.on{border-color:var(--accent);background:#1e1730}
+  .f:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  select{width:100%;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .btn{background:var(--panel);border:1px solid var(--line);color:var(--fg);border-radius:10px;padding:10px 14px;cursor:pointer;font:inherit}
+  .btn.big{flex:1;padding:14px;font-weight:600}
+  .btn.recbtn{background:var(--rec);border-color:var(--rec)}
+  .btn.recbtn.on{background:#fff;color:#000;border-color:#fff}
+  .meter{height:6px;background:var(--panel);border-radius:3px;overflow:hidden}
+  .meter i{display:block;height:100%;width:0;background:var(--accent)}
+  .takes{display:flex;flex-direction:column;gap:8px}
+  .take{display:flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px}
+  .take video{width:54px;height:96px;object-fit:cover;border-radius:6px;background:#000}
+  .take a{color:var(--accent)}
+  .small{color:var(--dim);font-size:12px}
+  label.chk{display:flex;gap:6px;align-items:center;color:var(--dim)}
+  .mobile-only{display:none}
+  .hint .btn{margin-top:14px}
+  /* iPhone: Bild bildschirmfüllend, Bedienung unten drüber */
+  @media (max-width:800px){
+    html,body{overflow:hidden;overscroll-behavior:none}
+    .app{display:block;padding:0;height:100dvh}
+    .stage{position:fixed;inset:0;height:100%;width:100%;border:0;border-radius:0;aspect-ratio:auto}
+    canvas{object-fit:cover}
+    .badge{top:calc(env(safe-area-inset-top,0px) + 10px)}
+    .side{position:fixed;left:0;right:0;bottom:0;gap:10px;overflow:visible;
+      padding:40px max(12px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 12px) max(12px,env(safe-area-inset-left,0px));
+      background:linear-gradient(transparent,rgba(0,0,0,.75) 45%)}
+    .desk-only,.label,h1,.f small,.f kbd{display:none}
+    .mobile-only{display:flex}
+    .filters{display:flex;overflow-x:auto;gap:6px;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+    .filters::-webkit-scrollbar{display:none}
+    .f{flex:0 0 auto;padding:8px 12px;border-radius:999px;background:rgba(22,22,26,.8)}
+    .f b{font-size:13px;white-space:nowrap}
+    .ctrl{justify-content:space-between;align-items:center;flex-wrap:nowrap}
+    .btn.recbtn{flex:0 0 auto;width:74px;height:74px;border-radius:50%;padding:0;font-size:0;border:5px solid #fff;background:var(--rec)}
+    .btn.recbtn.on{background:var(--rec);border-radius:22px;border-color:#fff}
+    .round{width:52px;height:52px;border-radius:50%;padding:0;background:rgba(22,22,26,.8);font-size:20px;justify-content:center;align-items:center}
+    .takes{flex-direction:row;overflow-x:auto}
+    .takes .small{display:none}
+    .take{flex:0 0 auto;padding:6px}
+    .take video{width:40px;height:72px}
+    .take .meta{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="stage" id="stage">
+    <canvas id="out" width="1080" height="1920"></canvas>
+    <div class="badge" id="fname">Normal</div>
+    <div class="badge rec" id="recBadge" style="left:auto;right:14px">● REC 0:00</div>
+    <div class="hint" id="hint"><div><div id="hintText">Kamera und Mikro starten</div><button class="btn big" id="start2" style="width:240px">Kamera starten</button></div></div>
+  </div>
+  <div class="side">
+    <h1>DEFORM<span>8</span></h1>
+    <div class="desk-only">
+      <div class="label">Kamera</div>
+      <select id="cam"><option>Erst Kamera starten</option></select>
+      <div class="row" style="margin-top:8px">
+        <button class="btn big" id="start">Kamera starten</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label class="chk"><input type="checkbox" id="mirror" checked> Spiegeln</label>
+        <span class="small" id="track">Gesichtserkennung lädt …</span>
+      </div>
+    </div>
+    <div class="desk-only">
+      <div class="label">Mikro-Pegel (treibt die Filter mit)</div>
+      <div class="meter"><i id="lvl"></i></div>
+    </div>
+    <div class="takes" id="takes"><span class="small">Noch keine Aufnahmen. Jede Aufnahme landet hier zum Speichern.</span></div>
+    <div>
+      <div class="label">Filter (Tasten 0–8, auch während der Aufnahme)</div>
+      <div class="filters" id="filters"></div>
+    </div>
+    <div class="row ctrl">
+      <button class="btn round mobile-only" id="flip" aria-label="Kamera wechseln">⇄</button>
+      <button class="btn big recbtn" id="rec" disabled>Aufnahme (Leertaste)</button>
+      <button class="btn round mobile-only" id="mir2" aria-label="Spiegeln umschalten">◐</button>
+    </div>
+  </div>
+</div>
+
+<script id="fs" type="x-shader/x-fragment">
+precision highp float;
+uniform sampler2D uTex;
+uniform vec2 uRes, uVid, uOff;
+uniform float uScale, uMirror;
+uniform vec2 uFace, uEyeL, uEyeR, uMouth, uChin, uForehead, uNose;
+uniform float uFS, uOpen, uLevel, uTime;
+uniform int uMode;
+
+vec2 lens(vec2 p, vec2 c, float r, float k){
+  vec2 d = p - c; float t = length(d) / r;
+  if (t >= 1.0) return p;
+  float f = 1.0 - t*t; f *= f;
+  return c + d * (1.0 - k*f);
+}
+vec3 cam(vec2 p){
+  vec2 v = (p - uOff) / uScale;
+  if (uMirror > 0.5) v.x = uVid.x - v.x;
+  return texture2D(uTex, clamp(v / uVid, 0.001, 0.999)).rgb;
+}
+float hash(vec2 s){ return fract(sin(dot(s, vec2(12.9898, 78.233))) * 43758.5453); }
+
+void main(){
+  vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  vec2 q = p; float fs = uFS;
+  vec3 col;
+
+  if (uMode == 1) {            // QUETSCHE
+    q = lens(q, uNose, fs*1.0, -1.2);
+  } else if (uMode == 2) {     // KULLERAUGEN
+    q = lens(q, uEyeL, fs*0.32, 0.62);
+    q = lens(q, uEyeR, fs*0.32, 0.62);
+    q = lens(q, uMouth, fs*0.38, -0.7);
+    q = lens(q, uChin, fs*0.45, -0.5);
+  } else if (uMode == 3) {     // SCHREIHALS
+    float k = clamp(0.12 + uOpen*1.3 + uLevel*0.35, 0.0, 0.84);
+    q = lens(q, uMouth, fs*(0.42 + 0.3*uOpen), k);
+  } else if (uMode == 4) {     // HÖHENFLUG
+    float s = uLevel * 1.1;
+    float dx = (p.x - uFace.x) / (fs*0.8);
+    float w = exp(-dx*dx);
+    if (p.y < uChin.y) {
+      q.y = uChin.y + (p.y - uChin.y) / (1.0 + s*w);
+      q.x = uFace.x + (p.x - uFace.x) * (1.0 + 0.3*s*w);
+    }
+  } else if (uMode == 5) {     // WACKELPUDDING
+    float A = fs * (0.012 + 0.11*uLevel);
+    vec2 d = p - uFace;
+    float w = exp(-dot(d,d) / (fs*fs*0.55));
+    q += A * w * vec2(sin(p.y/fs*14.0 + uTime*21.0), cos(p.x/fs*11.0 + uTime*17.0));
+  } else if (uMode == 6) {     // EIERKOPF
+    q = lens(q, uForehead + (uForehead - uFace)*0.35, fs*0.95, 0.6);
+    q = lens(q, uChin, fs*0.55, -0.9);
+  } else if (uMode == 8) {     // ZWILLING
+    if (p.x > uFace.x) q.x = 2.0*uFace.x - p.x;
+  }
+
+  if (uMode == 7) {            // AUTOTUNE-GLITCH
+    float lv = uLevel;
+    float band = floor(p.y / 28.0);
+    float tick = floor(uTime * 14.0);
+    float r = hash(vec2(band, tick));
+    if (r < 0.08 + lv*0.55) q.x += (hash(vec2(band+3.1, tick)) - 0.5) * fs * (0.1 + 0.6*lv);
+    float steps = mix(1.0, 22.0, smoothstep(0.35, 0.9, lv));
+    if (steps > 1.5) q = floor(q / steps) * steps + steps*0.5;
+    float o = 3.0 + lv*36.0;
+    col = vec3(cam(q + vec2(o,0.0)).r, cam(q).g, cam(q - vec2(o,0.0)).b);
+  } else {
+    col = cam(q);
+  }
+  gl_FragColor = vec4(col, 1.0);
+}
+</script>
+
+<script type="module">
+const FILTERS = [
+  {name:'Normal', desc:'ohne Filter'},
+  {name:'Quetsche', desc:'die Photo-Booth-Hommage'},
+  {name:'Kulleraugen', desc:'Babyface, Mini-Mund'},
+  {name:'Schreihals', desc:'Mund wächst beim Singen'},
+  {name:'Höhenflug', desc:'je lauter, desto Eierkopf'},
+  {name:'Wackelpudding', desc:'Gesicht wabbelt zur Stimme'},
+  {name:'Eierkopf', desc:'Alien-Stirn, Mini-Kinn'},
+  {name:'Autotune-Glitch', desc:'zerfällt, wenn du laut wirst'},
+  {name:'Zwilling', desc:'Gesicht gespiegelt'},
+];
+const W = 1080, H = 1920;
+let mode = 0;
+const $ = id => document.getElementById(id);
+
+// ---- Filter-Knöpfe
+const fwrap = $('filters');
+FILTERS.forEach((f,i) => {
+  const b = document.createElement('button');
+  b.className = 'f'; b.id = 'f'+i;
+  b.innerHTML = `<kbd>${i}</kbd><b>${f.name}</b><small>${f.desc}</small>`;
+  b.onclick = () => setMode(i);
+  fwrap.appendChild(b);
+});
+function setMode(i){ mode = i; document.querySelectorAll('.f').forEach((b,j)=>b.classList.toggle('on', j===i)); $('fname').textContent = FILTERS[i].name; }
+setMode(1);
+
+// ---- WebGL
+const canvas = $('out');
+const gl = canvas.getContext('webgl', {premultipliedAlpha:false, preserveDrawingBuffer:true});
+function sh(type, src){ const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(s); return s; }
+const prog = gl.createProgram();
+gl.attachShader(prog, sh(gl.VERTEX_SHADER, 'attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}'));
+gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, $('fs').textContent));
+gl.linkProgram(prog); gl.useProgram(prog);
+const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+const aLoc = gl.getAttribLocation(prog,'a'); gl.enableVertexAttribArray(aLoc); gl.vertexAttribPointer(aLoc,2,gl.FLOAT,false,0,0);
+const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+[gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T].forEach(k=>gl.texParameteri(gl.TEXTURE_2D,k,gl.CLAMP_TO_EDGE));
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+const U = n => gl.getUniformLocation(prog, n);
+const u = {};
+['uTex','uRes','uVid','uOff','uScale','uMirror','uFace','uEyeL','uEyeR','uMouth','uChin','uForehead','uNose','uFS','uOpen','uLevel','uTime','uMode'].forEach(n=>u[n]=U(n));
+gl.viewport(0,0,W,H);
+
+// ---- Kamera + Mikro
+const video = document.createElement('video'); video.playsInline = true; video.muted = true;
+let stream = null, analyser = null, abuf = null;
+async function listCams(){
+  const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
+  const sel = $('cam'); const cur = stream?.getVideoTracks()[0]?.getSettings().deviceId;
+  sel.innerHTML = devs.map(d=>`<option value="${d.deviceId}" ${d.deviceId===cur?'selected':''}>${d.label||'Kamera'}</option>`).join('');
+}
+const isPhone = matchMedia('(max-width:800px)').matches;
+let facing = 'user', ac = null;
+async function startCam(deviceId){
+  if (recorder) return;
+  if (!ac) ac = new (window.AudioContext||window.webkitAudioContext)();   // im Tipp anlegen, sonst bleibt iOS stumm
+  ac.resume();
+  if (stream) stream.getTracks().forEach(t=>t.stop());
+  const v = isPhone && !deviceId
+    ? {facingMode:facing, width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30}}
+    : {deviceId: deviceId?{exact:deviceId}:undefined, width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30}};
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: v, audio: {echoCancellation:false, noiseSuppression:false, autoGainControl:false}
+  });
+  video.srcObject = stream; await video.play();
+  const src = ac.createMediaStreamSource(stream);
+  analyser = ac.createAnalyser(); analyser.fftSize = 1024; abuf = new Float32Array(analyser.fftSize);
+  src.connect(analyser);
+  $('hint').style.display = 'none'; $('rec').disabled = false;
+  try { await navigator.wakeLock?.request('screen'); } catch(e) {}
+  await listCams();
+}
+const camFail = e => { $('hint').style.display = 'flex'; $('hintText').textContent = 'Kamera oder Mikro nicht freigegeben (' + e.message + '). Erlaube den Zugriff und tipp nochmal.'; };
+$('start').onclick = () => startCam($('cam').value && $('cam').value.length>20 ? $('cam').value : undefined).catch(camFail);
+$('start2').onclick = () => startCam().catch(camFail);
+$('cam').onchange = e => startCam(e.target.value).catch(camFail);
+$('flip').onclick = () => { facing = facing === 'user' ? 'environment' : 'user'; $('mirror').checked = facing === 'user'; startCam().catch(camFail); };
+$('mir2').onclick = () => { $('mirror').checked = !$('mirror').checked; };
+
+// ---- Gesichtserkennung (MediaPipe)
+let landmarker = null;
+(async () => {
+  try {
+    const {FaceLandmarker, FilesetResolver} = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs');
+    const files = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
+    landmarker = await FaceLandmarker.createFromOptions(files, {
+      baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task', delegate:'GPU'},
+      runningMode:'VIDEO', numFaces:1
+    });
+    $('track').textContent = 'Gesichtserkennung bereit';
+  } catch(e) { $('track').textContent = 'Ohne Gesichtserkennung (Filter sitzen mittig)'; console.warn(e); }
+})();
+
+// Gesichtspunkte in Ausgabe-Pixeln, geglättet
+const F = {face:[W/2,H*0.42], eyeL:[W*0.4,H*0.38], eyeR:[W*0.6,H*0.38], mouth:[W/2,H*0.5], chin:[W/2,H*0.56], forehead:[W/2,H*0.3], nose:[W/2,H*0.44], fs:W*0.5, open:0};
+let lastVT = -1, seen = 0;
+function geom(){
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const s = Math.max(W/vw, H/vh);
+  return {vw, vh, s, ox:(W - vw*s)/2, oy:(H - vh*s)/2};
+}
+function track(now){
+  if (!landmarker || video.currentTime === lastVT) return;
+  lastVT = video.currentTime;
+  const r = landmarker.detectForVideo(video, now);
+  const lm = r.faceLandmarks?.[0];
+  if (!lm) { seen = Math.max(0, seen-1); return; }
+  seen = 10;
+  const g = geom(), mir = $('mirror').checked;
+  const P = i => { let x = lm[i].x*g.vw; if (mir) x = g.vw - x; return [x*g.s + g.ox, lm[i].y*g.vh*g.s + g.oy]; };
+  const mid = (a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];
+  const dist = (a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+  const eyeA = lm.length>473 ? P(468) : mid(P(33),P(133));
+  const eyeB = lm.length>473 ? P(473) : mid(P(362),P(263));
+  const t = {eyeL:eyeA, eyeR:eyeB, mouth:mid(P(13),P(14)), chin:P(152), forehead:P(10), nose:mid(P(1),P(168)),
+             face:mid(P(10),P(152)), fs:dist(P(234),P(454))};
+  t.open = Math.min(1, Math.max(0, (dist(P(13),P(14))/dist(P(61),P(291)) - 0.08) / 0.55));
+  const k = 0.55;
+  for (const key in t) {
+    if (Array.isArray(t[key])) { F[key][0] += (t[key][0]-F[key][0])*k; F[key][1] += (t[key][1]-F[key][1])*k; }
+    else F[key] += (t[key]-F[key])*k;
+  }
+}
+
+// ---- Pegel
+let level = 0;
+function readLevel(){
+  if (!analyser) return 0;
+  analyser.getFloatTimeDomainData(abuf);
+  let sum = 0; for (let i=0;i<abuf.length;i++) sum += abuf[i]*abuf[i];
+  const db = 20*Math.log10(Math.sqrt(sum/abuf.length)+1e-9);
+  const target = Math.min(1, Math.max(0, (db + 50) / 38));   // -50 dB → 0, -12 dB → 1
+  level += (target - level) * (target > level ? 0.5 : 0.12);
+  $('lvl').style.width = (level*100).toFixed(0)+'%';
+  return level;
+}
+
+// ---- Render-Schleife
+function frame(now){
+  requestAnimationFrame(frame);
+  if (video.readyState < 2) return;
+  try { track(now); } catch(e) {}
+  readLevel();
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, video);
+  const g = geom();
+  gl.uniform1i(u.uTex, 0);
+  gl.uniform2f(u.uRes, W, H); gl.uniform2f(u.uVid, g.vw, g.vh); gl.uniform2f(u.uOff, g.ox, g.oy);
+  gl.uniform1f(u.uScale, g.s); gl.uniform1f(u.uMirror, $('mirror').checked ? 1 : 0);
+  gl.uniform2f(u.uFace, ...F.face); gl.uniform2f(u.uEyeL, ...F.eyeL); gl.uniform2f(u.uEyeR, ...F.eyeR);
+  gl.uniform2f(u.uMouth, ...F.mouth); gl.uniform2f(u.uChin, ...F.chin); gl.uniform2f(u.uForehead, ...F.forehead); gl.uniform2f(u.uNose, ...F.nose);
+  gl.uniform1f(u.uFS, F.fs); gl.uniform1f(u.uOpen, F.open); gl.uniform1f(u.uLevel, level); gl.uniform1f(u.uTime, now/1000);
+  gl.uniform1i(u.uMode, mode);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  if (recorder) { const s = Math.floor((performance.now()-recStart)/1000); $('recBadge').textContent = `● REC ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; }
+}
+requestAnimationFrame(frame);
+
+// ---- Aufnahme
+let recorder = null, chunks = [], recStart = 0;
+const TYPES = ['video/mp4;codecs=avc1.640028,mp4a.40.2','video/mp4;codecs=avc1,mp4a.40.2','video/mp4','video/webm;codecs=vp9,opus','video/webm'];
+function toggleRec(){
+  if (!stream) return;
+  if (recorder) { recorder.stop(); return; }
+  const out = canvas.captureStream(30);
+  stream.getAudioTracks().forEach(t => out.addTrack(t));
+  const type = TYPES.find(t => MediaRecorder.isTypeSupported(t)) || '';
+  recorder = new MediaRecorder(out, {mimeType:type, videoBitsPerSecond:14_000_000, audioBitsPerSecond:256_000});
+  chunks = [];
+  recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
+  recorder.onstop = () => {
+    const blob = new Blob(chunks, {type: recorder.mimeType});
+    addTake(blob, recorder.mimeType.includes('mp4') ? 'mp4' : 'webm');
+    recorder = null; $('rec').classList.remove('on'); $('rec').textContent = 'Aufnahme (Leertaste)'; $('recBadge').classList.remove('on');
+  };
+  recorder.start(500); recStart = performance.now();
+  $('rec').classList.add('on'); $('rec').textContent = 'Stopp (Leertaste)'; $('recBadge').classList.add('on');
+}
+let takeNo = 0;
+function addTake(blob, ext){
+  const url = URL.createObjectURL(blob);
+  const ts = new Date(); const name = `DEFORM8_${FILTERS[mode].name}_${ts.getHours()}${String(ts.getMinutes()).padStart(2,'0')}${String(ts.getSeconds()).padStart(2,'0')}.${ext}`;
+  const box = $('takes'); if (!takeNo++) box.innerHTML = '';
+  const el = document.createElement('div'); el.className = 'take';
+  el.innerHTML = `<video src="${url}" muted loop playsinline autoplay></video><div><div class="meta">${name}</div><div class="small meta">${(blob.size/1e6).toFixed(1)} MB</div><button class="btn save">Sichern</button></div>`;
+  const v = el.querySelector('video'); el.onmouseenter = () => v.play(); el.onmouseleave = () => v.pause();
+  const file = new File([blob], name, {type: blob.type});
+  el.querySelector('.save').onclick = async () => {
+    // iPhone: Teilen-Menü öffnen, dort „Video sichern“ → landet in Fotos
+    if (isPhone && navigator.canShare && navigator.canShare({files:[file]})) {
+      try { await navigator.share({files:[file]}); return; } catch(e) { if (e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  };
+  box.prepend(el);
+}
+$('rec').onclick = toggleRec;
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'SELECT') return;
+  if (e.code === 'Space') { e.preventDefault(); toggleRec(); }
+  const n = parseInt(e.key); if (n >= 0 && n <= 8) setMode(n);
+});
+</script>
+</body>
+</html>
