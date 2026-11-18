@@ -432,6 +432,13 @@ function toggleRec(){
   $('rec').classList.add('on'); $('rec').textContent = 'Stopp (Leertaste)'; $('recBadge').classList.add('on');
 }
 let takeNo = 0;
+function note(t){
+  let n = $('note');
+  if (!n) { n = document.createElement('div'); n.id = 'note'; n.className = 'badge';
+    n.style.cssText = 'left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 56px);display:block;white-space:nowrap;z-index:9';
+    $('stage').appendChild(n); }
+  n.textContent = t; n.style.opacity = 1; clearTimeout(n._t); n._t = setTimeout(() => n.style.opacity = 0, 5000);
+}
 function addTake(blob, ext){
   const url = URL.createObjectURL(blob);
   const ts = new Date(); const name = `DEFORM8_${FILTERS[mode].name}_${ts.getHours()}${String(ts.getMinutes()).padStart(2,'0')}${String(ts.getSeconds()).padStart(2,'0')}.${ext}`;
@@ -439,13 +446,15 @@ function addTake(blob, ext){
   const el = document.createElement('div'); el.className = 'take';
   el.innerHTML = `<video src="${url}" muted loop playsinline autoplay></video><div><div class="meta">${name}</div><div class="small meta">${(blob.size/1e6).toFixed(1)} MB</div><button class="btn save">Sichern</button></div>`;
   const v = el.querySelector('video'); el.onmouseenter = () => v.play(); el.onmouseleave = () => v.pause();
-  const file = new File([blob], name, {type: blob.type});
+  // Ohne Codec-Zusatz im Typ, sonst lehnt das iPhone-Teilen-Menü die Datei ab
+  const file = new File([blob], name, {type: ext === 'mp4' ? 'video/mp4' : 'video/webm'});
   el.querySelector('.save').onclick = async () => {
     // iPhone: Teilen-Menü öffnen, dort „Video sichern“ → landet in Fotos
     if (isPhone() && navigator.canShare && navigator.canShare({files:[file]})) {
       try { await navigator.share({files:[file]}); return; } catch(e) { if (e.name === 'AbortError') return; }
     }
     const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    if (isPhone()) note('Als Download gespeichert: App „Dateien“ › Downloads');
   };
   box.prepend(el);
 }
